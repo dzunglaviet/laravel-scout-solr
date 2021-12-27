@@ -14,6 +14,7 @@ class SolrProvider extends ServiceProvider
     public function boot()
     {
         app(EngineManager::class)->extend('solr', function ($app) {
+            
             $config = [
                 'endpoint' => [
                     'default' => [
@@ -21,11 +22,13 @@ class SolrProvider extends ServiceProvider
                         'port' => config('scout.solr.port'),
                         'path' => config('scout.solr.path'),
                         'core' => config('scout.solr.core'),
+                        'username' => config('scout.solr.username'),
+                        'password' => config('scout.solr.password'),
                     ],
                 ],
             ];
 
-            return new SolrEngine(new Client($config));
+            return new SolrEngine($config);
         });
     }
 }

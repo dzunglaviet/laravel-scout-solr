@@ -21,9 +21,11 @@ class SolrEngine extends Engine
      *
      * @param Client $client
      */
-    public function __construct(Client $client)
+    public function __construct($config)
     {
-        $this->client = $client;
+        $adapter = new \Solarium\Core\Client\Adapter\Http(); 
+        $eventDispatcher = new \Symfony\Component\EventDispatcher\EventDispatcher();        
+        $this->client = new Client($adapter, $eventDispatcher, $config);
     }
 
     /**
@@ -239,7 +241,7 @@ class SolrEngine extends Engine
         }
 
         // @todo callback return
-
+        // print_r($selectQuery);
         return $this->client->select($selectQuery);
     }
 
