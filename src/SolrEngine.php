@@ -158,8 +158,9 @@ class SolrEngine extends Engine
     public function mapIds($results)
     {
         $ids = array_map(function ($document) {
-            return $document->id;
+            return $document->_id_i;
         }, $results->getDocuments());
+
 
         return collect($ids);
     }
@@ -174,12 +175,14 @@ class SolrEngine extends Engine
      */
     public function map(Builder $builder, $results, $model)
     {
+
         if (\count($results->getDocuments()) === 0) {
             return Collection::make();
         }
 
+        //Create models
         $models = $model->getScoutModelsByIds(
-            $builder, collect($results->getDocuments())->pluck('id')->values()->all()
+            $builder, collect($results->getDocuments())->pluck('_id_i')->values()->all()
         )->keyBy(function ($model) {
             return $model->getScoutKey();
         });
@@ -229,7 +232,14 @@ class SolrEngine extends Engine
      */
     protected function performSearch(Builder $builder, $perPage = null, $offset = null)
     {
+        global $search_highlights;
+
+        $builder->where('_table', $builder->model->getTable());
         $selectQuery = $this->client->createSelect();
+        $selectQuery->setQueryDefaultField('_text_');
+        $selectQuery->setQueryDefaultOperator('AND');
+        $hl = $selectQuery->getHighlighting();
+        $hl->setFields('_text_');
 
         $conditions = (empty($builder->query)) ? [] : [$builder->query];
         $conditions = array_merge($conditions, $this->filters($builder));
@@ -238,11 +248,19 @@ class SolrEngine extends Engine
 
         if (!\is_null($perPage)) {
             $selectQuery->setStart($offset)->setRows($perPage);
+        } else {
+            $selectQuery->setStart(0)->setRows(500);
         }
 
         // @todo callback return
-        // print_r($selectQuery);
-        return $this->client->select($selectQuery);
+        $results = $this->client->select($selectQuery);
+
+        //Add to global hightlights
+        $search_highlights = collect($results->getHighlighting()->getResults())->map(function ($obj) {
+            return $obj->getField('_text_');
+        })->merge($search_highlights ?? [])->all();
+
+        return $results;
     }
 
     /**
