@@ -182,7 +182,7 @@ class SolrEngine extends Engine
 
         //Create models
         $models = $model->getScoutModelsByIds(
-            $builder, collect($results->getDocuments())->pluck('_id_i')->values()->all()
+            $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
         )->keyBy(function ($model) {
             return $model->getScoutKey();
         });
@@ -242,9 +242,60 @@ class SolrEngine extends Engine
         $hl->setFields('_text_');
 
         $conditions = (empty($builder->query)) ? [] : [$builder->query];
-        $conditions = array_merge($conditions, $this->filters($builder));
+
+        foreach($builder->wheres as $colWithOp => $value) {
+            list($column, $operator) = array_pad(explode('|', $colWithOp), 2, '=');
+            switch (strtoupper($operator)) {
+                case '=':
+                    $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
+                    break;
+                case 'LIKE':
+                    $conditions[] = sprintf('%s:%s', $column, $value);
+                    break;
+                case 'CONTAINS':
+                    $conditions[] = sprintf('%s:*%s*', $column, str_replace('*', '\\*', $value));
+                    break;
+                case 'BEGIN':
+                    $conditions[] = sprintf('%s:%s*', $column, str_replace('*', '\\*', $value));
+                    break;
+                case 'END':
+                    $conditions[] = sprintf('%s:*%s', $column, str_replace('*', '\\*', $value));
+                    break;
+                case '>':
+                    $conditions[] = sprintf('%s:{"%s" TO *}', $column, str_replace('*', '\\*', $value));
+                    break;                
+                case '>=':
+                    $conditions[] = sprintf('%s:["%s" TO *]', $column, str_replace('*', '\\*', $value));
+                    break;                
+                case '<':
+                    $conditions[] = sprintf('%s:{* TO "%s"}', $column, str_replace('*', '\\*', $value));
+                    break;                
+                case '<=':
+                    $conditions[] = sprintf('%s:[* TO "%s"]', $column, str_replace('*', '\\*', $value));
+                    break;                
+                case 'BETWEEN':
+                    $conditions[] = sprintf('%s:["%s" TO "%s"]', $column, ...collect($value)->map( function ($v) {
+                      return str_replace('*', '\\*', $v);
+                    })->all());
+                    break;                
+                case 'IN':
+                    $conditions[] = sprintf('%s:(%s)', $column, collect($value)->map( function ($v) {
+                      return sprintf('"%s"', str_replace('*', '\\*', $v));
+                    })->implode(' OR '));
+                    break;                                
+            }
+        }
+
+        // $conditions = array_merge($conditions, $this->filters($builder));
+
 
         $selectQuery->setQuery(implode(' ', $conditions));
+        // dd($builder);
+        // dd($conditions);
+        // $selectQuery->createFilterQuery([
+        //     'key'   => '_id',
+        //     'query' => '_id:[40000 TO *]'
+        // ]);
 
         if (!\is_null($perPage)) {
             $selectQuery->setStart($offset)->setRows($perPage);
@@ -254,7 +305,7 @@ class SolrEngine extends Engine
 
         // @todo callback return
         $results = $this->client->select($selectQuery);
-
+        // dd($results);
         //Add to global hightlights
         $search_highlights = collect($results->getHighlighting()->getResults())->map(function ($obj) {
             return $obj->getField('_text_');
@@ -272,7 +323,7 @@ class SolrEngine extends Engine
     protected function filters(Builder $builder)
     {
         return collect($builder->wheres)->map(function ($value, $key) {
-            return sprintf('%s:"%s"', $key, $value);
+            return sprintf('%s:%s', $key, $value);
         })->values()->all();
     }
 }
