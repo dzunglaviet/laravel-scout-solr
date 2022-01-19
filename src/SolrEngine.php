@@ -158,7 +158,7 @@ class SolrEngine extends Engine
     public function mapIds($results)
     {
         $ids = array_map(function ($document) {
-            return $document->_id_i;
+            return $document->_id;
         }, $results->getDocuments());
 
 
@@ -180,12 +180,15 @@ class SolrEngine extends Engine
             return Collection::make();
         }
 
+        // dd($results->getDocuments());
+
         //Create models
         $models = $model->getScoutModelsByIds(
             $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
         )->keyBy(function ($model) {
             return $model->getScoutKey();
         });
+        // dd(collect($results->getDocuments())->pluck('_id')->values()->all());
 
         return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
             if (isset($models[$document['id']])) {
@@ -232,19 +235,42 @@ class SolrEngine extends Engine
      */
     protected function performSearch(Builder $builder, $perPage = null, $offset = null)
     {
-        global $search_highlights;
+        global $search_highlights, $search_summary;
 
         $builder->where('_table', $builder->model->getTable());
         $selectQuery = $this->client->createSelect();
+        $selectQuery->setFields(['id', '_id']);
         $selectQuery->setQueryDefaultField('_text_');
         $selectQuery->setQueryDefaultOperator('AND');
         $hl = $selectQuery->getHighlighting();
         $hl->setFields('_text_');
 
-        $conditions = (empty($builder->query)) ? [] : [$builder->query];
+        //orderBy and summaryBy
+        $summaryBy = '';
+        foreach ($builder->orders as $order) {
+            //Extract column, direction
+            extract($order);
+
+            //Detect summaryBy
+            if (strpos($column, '|')) {
+                // $summaryBy = true;
+                $summaryBy = explode('|', $column)[0];
+                $selectQuery->getFacetSet()->createFacetField($summaryBy)->setField("{!ex=$summaryBy}{$summaryBy}");
+            } else {
+                $selectQuery->addSort($column, $direction);
+
+            }
+        }
+
+        if ($query = $builder->query) {
+            $selectQuery->setQuery($query);
+        }
+
+        $conditions = []; //(empty($builder->query)) ? [] : [$builder->query];
 
         foreach($builder->wheres as $colWithOp => $value) {
             list($column, $operator) = array_pad(explode('|', $colWithOp), 2, '=');
+
             switch (strtoupper($operator)) {
                 case '=':
                     $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
@@ -288,9 +314,16 @@ class SolrEngine extends Engine
 
         // $conditions = array_merge($conditions, $this->filters($builder));
 
+        foreach ($conditions as $query) {
+            list($key,) = explode(':', $query, 2);
+            $filterQuery = $selectQuery->createFilterQuery(compact('key', 'query'));
+            if ($key == $summaryBy) {
+                $filterQuery->addTag($key);
+            }
+        }
 
-        $selectQuery->setQuery(implode(' ', $conditions));
-        // dd($builder);
+        // $selectQuery->setQuery(implode(' ', $conditions));
+        // dd($selectQuery, $builder);
         // dd($conditions);
         // $selectQuery->createFilterQuery([
         //     'key'   => '_id',
@@ -305,11 +338,17 @@ class SolrEngine extends Engine
 
         // @todo callback return
         $results = $this->client->select($selectQuery);
-        // dd($results);
+        // dd($results, $selectQuery);
+
+       
         //Add to global hightlights
         $search_highlights = collect($results->getHighlighting()->getResults())->map(function ($obj) {
             return $obj->getField('_text_');
         })->merge($search_highlights ?? [])->all();
+
+        if ($summaryBy) {
+            $search_summary = collect($results->getFacetSet()->getFacets()[$summaryBy] ?? [])->all();            
+        }
 
         return $results;
     }
