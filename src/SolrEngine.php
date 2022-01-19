@@ -218,9 +218,11 @@ class SolrEngine extends Engine
     {
         $class = \is_object($model) ? \get_class($model) : false;
         if ($class) {
+            $class = str_replace('\\', '\\\\', $class);
             $query = $this->client->createUpdate();
-            $query->addDeleteQuery("_class:{$class}");
+            $query->addDeleteQuery("_class:\"{$class}\"");
             $query->addCommit();
+
             $this->client->update($query);
         }
     }
