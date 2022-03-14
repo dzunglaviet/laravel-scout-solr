@@ -227,6 +227,11 @@ class SolrEngine extends Engine
         }
     }
 
+    protected function prepareLikeValue($value) {
+        return collect(explode(' ', $value))->map(function ($v) {
+            return trim($v);
+        })->implode('\\ ');
+    }
     /**
      * Perform the given search on the engine.
      *
@@ -272,22 +277,23 @@ class SolrEngine extends Engine
 
         foreach($builder->wheres as $colWithOp => $value) {
             list($column, $operator) = array_pad(explode('|', $colWithOp), 2, '=');
+            $value = str_replace('\\', '\\\\', $value);
 
             switch (strtoupper($operator)) {
                 case '=':
                     $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
                     break;
                 case 'LIKE':
-                    $conditions[] = sprintf('%s:%s', $column, $value);
+                    $conditions[] = sprintf('%s:%s', $column, $this->prepareLikeValue($value));
                     break;
                 case 'CONTAINS':
-                    $conditions[] = sprintf('%s:*%s*', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:*%s*', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case 'BEGIN':
-                    $conditions[] = sprintf('%s:%s*', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:%s*', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case 'END':
-                    $conditions[] = sprintf('%s:*%s', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:*%s', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case '>':
                     $conditions[] = sprintf('%s:{"%s" TO *}', $column, str_replace('*', '\\*', $value));
