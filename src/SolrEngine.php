@@ -191,12 +191,7 @@ class SolrEngine extends Engine
             return $model->getTable(). '_'. $model->getScoutKey();
         });
 
-        // return $models;
-
-
-        // dd($models);
-        // dd(collect($results->getDocuments())->pluck('_id')->values()->all());
-
+        //Keep sort order
         return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
             if (isset($models[$document['id']])) {
                 return $models[$document['id']];
