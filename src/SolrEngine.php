@@ -185,22 +185,23 @@ class SolrEngine extends Engine
         //Create models
         $models = $model->getScoutModelsByIds(
             $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
-        )->values();
+        )
+        // ->values();
+        ->keyBy(function ($model) {
+            return $model->getTable(). '_'. $model->getScoutKey();
+        });
 
-        return $models;
+        // return $models;
 
-        // ->keyBy(function ($model) {
-        //     return $model->getTable(). '_'. $model->getScoutKey();
-        // });
 
         // dd($models);
         // dd(collect($results->getDocuments())->pluck('_id')->values()->all());
 
-        // return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
-        //     if (isset($models[$document['id']])) {
-        //         return $models[$document['id']];
-        //     }
-        // })->filter()->values();
+        return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
+            if (isset($models[$document['id']])) {
+                return $models[$document['id']];
+            }
+        })->filter()->values();
     }
 
     /**
