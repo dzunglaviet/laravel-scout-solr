@@ -185,18 +185,22 @@ class SolrEngine extends Engine
         //Create models
         $models = $model->getScoutModelsByIds(
             $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
-        )->keyBy(function ($model) {
-            return $model->getTable(). '_'. $model->getScoutKey();
-        });
+        )->values();
+
+        return $models;
+
+        // ->keyBy(function ($model) {
+        //     return $model->getTable(). '_'. $model->getScoutKey();
+        // });
 
         // dd($models);
         // dd(collect($results->getDocuments())->pluck('_id')->values()->all());
 
-        return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
-            if (isset($models[$document['id']])) {
-                return $models[$document['id']];
-            }
-        })->filter()->values();
+        // return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
+        //     if (isset($models[$document['id']])) {
+        //         return $models[$document['id']];
+        //     }
+        // })->filter()->values();
     }
 
     /**
@@ -249,10 +253,7 @@ class SolrEngine extends Engine
         $builder->where('_table', $builder->model->getTable());
         $selectQuery = $this->client->createSelect();
         $selectQuery->setFields(['id', '_id']);
-        $selectQuery->setQueryDefaultField('_text_');
         $selectQuery->setQueryDefaultOperator('AND');
-        $hl = $selectQuery->getHighlighting();
-        $hl->setFields('_text_');
 
         //orderBy and summaryBy
         $summaryBy = '';
@@ -271,8 +272,12 @@ class SolrEngine extends Engine
             }
         }
 
+        $hl = null;
         if ($query = $builder->query) {
+            $selectQuery->setQueryDefaultField('_text_');
             $selectQuery->setQuery($query);
+            $hl = $selectQuery->getHighlighting();
+            $hl->setFields('_text_');
         }
 
         $conditions = []; //(empty($builder->query)) ? [] : [$builder->query];
@@ -342,21 +347,26 @@ class SolrEngine extends Engine
         //     'query' => '_id:[40000 TO *]'
         // ]);
 
+        $perPage = $builder->limit ?? $perPage;
+        $perPage = $perPage == -1 ? 1000*1000 : $perPage;
+        $offset = $offset ?: 0;
+
         if (!\is_null($perPage)) {
             $selectQuery->setStart($offset)->setRows($perPage);
         } else {
             $selectQuery->setStart(0)->setRows(500);
         }
 
+        // dd($selectQuery);
         // @todo callback return
         $results = $this->client->select($selectQuery);
         // dd($results, $selectQuery);
 
        
         //Add to global hightlights
-        $search_highlights = collect($results->getHighlighting()->getResults())->map(function ($obj) {
+        $search_highlights = $hl ? collect($results->getHighlighting()->getResults())->map(function ($obj) {
             return $obj->getField('_text_');
-        })->merge($search_highlights ?? [])->all();
+        })->merge($search_highlights ?? [])->all() : [];
 
         if ($summaryBy) {
             $search_summary = collect($results->getFacetSet()->getFacets()[$summaryBy] ?? [])->all();            
