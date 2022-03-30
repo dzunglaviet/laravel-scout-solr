@@ -83,7 +83,7 @@ class SolrEngine extends Engine
             // Make sure there is an ID in the array,
             // otherwise we will create duplicates all the time.
             if (!\array_key_exists('id', $attrs)) {
-                $attrs['id'] = $model->getScoutKey();
+                $attrs['id'] = $model->getTable(). '_'. $model->getScoutKey();
             }
 
             // Add model class to attributes for flushing.
@@ -112,7 +112,7 @@ class SolrEngine extends Engine
         }
 
         $ids = $models->map(function ($model) {
-            return $model->getScoutKey();
+            return $model->getTable(). '_'. $model->getScoutKey();
         });
 
         $query = $this->client->createUpdate();
@@ -180,14 +180,16 @@ class SolrEngine extends Engine
             return Collection::make();
         }
 
-        // dd($results->getDocuments());
+        // dd($results);
 
         //Create models
         $models = $model->getScoutModelsByIds(
             $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
         )->keyBy(function ($model) {
-            return $model->getScoutKey();
+            return $model->getTable(). '_'. $model->getScoutKey();
         });
+
+        // dd($models);
         // dd(collect($results->getDocuments())->pluck('_id')->values()->all());
 
         return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
@@ -227,6 +229,11 @@ class SolrEngine extends Engine
         }
     }
 
+    protected function prepareLikeValue($value) {
+        return collect(explode(' ', $value))->map(function ($v) {
+            return trim($v);
+        })->implode('\\ ');
+    }
     /**
      * Perform the given search on the engine.
      *
@@ -270,24 +277,27 @@ class SolrEngine extends Engine
 
         $conditions = []; //(empty($builder->query)) ? [] : [$builder->query];
 
+        // dd($builder);
+
         foreach($builder->wheres as $colWithOp => $value) {
             list($column, $operator) = array_pad(explode('|', $colWithOp), 2, '=');
+            $value = str_replace('\\', '\\\\', $value);
 
             switch (strtoupper($operator)) {
                 case '=':
                     $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
                     break;
                 case 'LIKE':
-                    $conditions[] = sprintf('%s:%s', $column, $value);
+                    $conditions[] = sprintf('%s:%s', $column, $this->prepareLikeValue($value));
                     break;
                 case 'CONTAINS':
-                    $conditions[] = sprintf('%s:*%s*', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:*%s*', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case 'BEGIN':
-                    $conditions[] = sprintf('%s:%s*', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:%s*', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case 'END':
-                    $conditions[] = sprintf('%s:*%s', $column, str_replace('*', '\\*', $value));
+                    $conditions[] = sprintf('%s:*%s', $column, $this->prepareLikeValue(str_replace('*', '\\*', $value)));
                     break;
                 case '>':
                     $conditions[] = sprintf('%s:{"%s" TO *}', $column, str_replace('*', '\\*', $value));
