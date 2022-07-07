@@ -365,7 +365,6 @@ class SolrEngine extends Engine
 
         // @todo callback return
         $results = $this->client->select($selectQuery);
-        dd($results, $selectQuery, $builder);
 
        
         //Add to global hightlights
