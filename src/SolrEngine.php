@@ -9,6 +9,8 @@ use Laravel\Scout\Builder;
 use Laravel\Scout\Engines\Engine;
 use Solarium\Client;
 
+use Carbon\Carbon;
+
 class SolrEngine extends Engine
 {
     /**
@@ -175,24 +177,25 @@ class SolrEngine extends Engine
      */
     public function map(Builder $builder, $results, $model)
     {
+        $documents = collect($results->getDocuments());
 
-        if (\count($results->getDocuments()) === 0) {
-            return Collection::make();
+        if ($documents->count() === 0) {
+            return $documents;
         }
 
-        // dd($results);
 
         //Create models
         $models = $model->getScoutModelsByIds(
-            $builder, collect($results->getDocuments())->pluck('_id')->values()->all()
+            $builder, $documents->pluck('_id')->values()->all()
         )
-        // ->values();
         ->keyBy(function ($model) {
             return $model->getTable(). '_'. $model->getScoutKey();
         });
 
+        // dd($models);
+
         //Keep sort order
-        return Collection::make($results->getDocuments())->map(function ($document) use ($models) {
+        return $documents->map(function ($document) use ($models) {
             if (isset($models[$document['id']])) {
                 return $models[$document['id']];
             }
@@ -286,7 +289,14 @@ class SolrEngine extends Engine
 
             switch (strtoupper($operator)) {
                 case '=':
-                    $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
+                    if (\Str::endsWith($column, '_dt')) {
+                        $conditions[] = sprintf('%s:["%s" TO "%s"]', $column, 
+                            Carbon::parse($value)->startOf('day')->toISOString(),
+                            Carbon::parse($value)->endOf('day')->toISOString(),
+                        );
+                    } else {
+                        $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));                        
+                    }
                     break;
                 case 'LIKE':
                     $conditions[] = sprintf('%s:%s', $column, $this->prepareLikeValue($value));
@@ -353,10 +363,9 @@ class SolrEngine extends Engine
             $selectQuery->setStart(0)->setRows(500);
         }
 
-        // dd($selectQuery);
         // @todo callback return
         $results = $this->client->select($selectQuery);
-        // dd($results, $selectQuery);
+        dd($results, $selectQuery, $builder);
 
        
         //Add to global hightlights
