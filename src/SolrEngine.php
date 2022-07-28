@@ -335,6 +335,12 @@ class SolrEngine extends Engine
                       return sprintf('"%s"', str_replace('*', '\\*', $v));
                     })->implode(' OR '));
                     break;                                
+                case 'NULL':
+                    $conditions[] = sprintf('-%s:[* TO *]', $column);
+                    break;                                
+                case 'NOTNULL':
+                    $conditions[] = sprintf('%s:[* TO *]', $column);
+                    break;                                
             }
         }
 
