@@ -288,6 +288,9 @@ class SolrEngine extends Engine
                 case '=':
                     $conditions[] = sprintf('%s:"%s"', $column, str_replace('*', '\\*', $value));
                     break;
+                case '!=':
+                    $conditions[] = sprintf('-%s:"%s"', $column, str_replace('*', '\\*', $value));
+                    break;
                 case 'LIKE':
                     $conditions[] = sprintf('%s:%s', $column, $this->prepareLikeValue($value));
                     break;
